@@ -225,6 +225,9 @@ async def request_password_reset_complete(
     existed_token = db_user.password_reset_token
 
     if not existed_token or existed_token.token != user_data.token:
+        if existed_token:
+            await db.delete(existed_token)
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid email or token."
@@ -285,6 +288,7 @@ async def login_user(
 
     token_data = {
         "sub": str(db_user.id),
+        "user_id": db_user.id,
         "email": user_data.email,
     }
     try:
@@ -313,7 +317,7 @@ async def login_user(
 
 @router.post(
     "/refresh/",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
     response_model=TokenRefreshResponseSchema
 )
 async def refresh_access_token(
@@ -348,5 +352,9 @@ async def refresh_access_token(
         raise HTTPException(status_code=404, detail="User found.")
 
     new_access_token = jwt_manager.create_access_token(
-        data={"sub": str(db_user.id), "email": db_user.email})
+        data={
+            "sub": str(db_user.id),
+            "user_id": db_user.id,
+            "email": db_user.email}
+    )
     return TokenRefreshResponseSchema(access_token=new_access_token)
