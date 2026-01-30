@@ -73,11 +73,17 @@ async def register_user(
                 status_code=500,
                 detail="An error occurred during user creation."
             )
-        new_user = UserModel.create(
-            email=user_data.email,
-            raw_password=user_data.password,
-            group_id=group.id
-        )
+        try:
+            new_user = UserModel.create(
+                email=user_data.email,
+                raw_password=user_data.password,
+                group_id=group.id
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
         db.add(new_user)
         await db.flush()
         activation_token = ActivationTokenModel(user_id=new_user.id)
@@ -285,7 +291,7 @@ async def login_user(
         access_token = jwt_manager.create_access_token(data=token_data)
         refresh_token = jwt_manager.create_refresh_token(data=token_data)
 
-        db_refresh_token = RefreshTokenModel(
+        db_refresh_token = RefreshTokenModel.create(
             token=refresh_token,
             days_valid=settings.LOGIN_TIME_DAYS,
             user_id=db_user.id
@@ -305,11 +311,7 @@ async def login_user(
         )
 
 
-@router.post(
-    "/refresh/",
-    response_model=TokenRefreshResponseSchema,
-    status_code=status.HTTP_200_OK,
-)
+@router.post("/refresh/", response_model=TokenRefreshResponseSchema)
 async def refresh_access_token(
         data: TokenRefreshRequestSchema,
         db: Annotated[AsyncSession, Depends(get_db)],
@@ -319,51 +321,28 @@ async def refresh_access_token(
     try:
         payload = jwt_manager.decode_refresh_token(data.refresh_token)
     except TokenExpiredError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token has expired."
-        )
-    except InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid refresh token."
-        )
+        raise HTTPException(status_code=400, detail="Token has expired.")
+    except (InvalidTokenError, BaseSecurityError):
+        raise HTTPException(status_code=400, detail="Invalid refresh token.")
 
     user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid token payload."
-        )
 
     token_result = await db.execute(
-        select(RefreshTokenModel)
-        .where(RefreshTokenModel.token == data.refresh_token)
+        select(RefreshTokenModel).where(
+            RefreshTokenModel.token == data.refresh_token)
     )
     db_token = token_result.scalar_one_or_none()
 
     if not db_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token not found."
-        )
+        raise HTTPException(status_code=401, detail="Refresh token not found.")
 
     user_result = await db.execute(
-        select(UserModel).where(UserModel.id == int(user_id))
-    )
+        select(UserModel).where(UserModel.id == int(user_id)))
     db_user = user_result.scalar_one_or_none()
 
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found."
-        )
+        raise HTTPException(status_code=404, detail="User found.")
 
-    token_data = {
-        "sub": str(db_user.id),
-        "email": db_user.email,
-    }
-
-    new_access_token = jwt_manager.create_access_token(data=token_data)
-
+    new_access_token = jwt_manager.create_access_token(
+        data={"sub": str(db_user.id), "email": db_user.email})
     return TokenRefreshResponseSchema(access_token=new_access_token)
