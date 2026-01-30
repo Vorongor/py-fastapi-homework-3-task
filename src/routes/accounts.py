@@ -347,7 +347,7 @@ async def refresh_access_token(
     db_user = user_result.scalar_one_or_none()
 
     if not db_user:
-        raise HTTPException(status_code=404, detail="User found.")
+        raise HTTPException(status_code=404, detail="User not found.")
 
     new_access_token = jwt_manager.create_access_token(
         data={
