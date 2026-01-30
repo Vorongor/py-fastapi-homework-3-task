@@ -328,12 +328,10 @@ async def refresh_access_token(
 ) -> TokenRefreshResponseSchema:
     try:
         payload = jwt_manager.decode_refresh_token(data.refresh_token)
-    except TokenExpiredError:
+    except (InvalidTokenError, BaseSecurityError, TokenExpiredError):
         raise HTTPException(status_code=400, detail="Token has expired.")
-    except (InvalidTokenError, BaseSecurityError):
-        raise HTTPException(status_code=400, detail="Invalid refresh token.")
 
-    user_id = payload.get("sub")
+    user_id = payload.get("user_id")
 
     token_result = await db.execute(
         select(RefreshTokenModel).where(
