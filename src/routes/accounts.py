@@ -112,7 +112,7 @@ async def activate_user(
     )
     if not db_user:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"A user with this email {user_data.email} not exists.",
         )
 
@@ -123,13 +123,13 @@ async def activate_user(
         )
 
     user_token = db_user.activation_token
-    if user_token.token != user_data.token or not user_token:
+    if not user_token or user_token.token != user_data.token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired activation token."
         )
 
-    if user_token.expires_at < datetime.now():
+    if user_token.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired activation token."
