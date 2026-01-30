@@ -81,7 +81,7 @@ async def register_user(
             )
         except ValueError as e:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(e)
             )
         db.add(new_user)
@@ -135,7 +135,7 @@ async def activate_user(
             detail="Invalid or expired activation token."
         )
 
-    if user_token.expires_at < datetime.now(timezone.utc):
+    if user_token.expires_at < datetime.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired activation token."
@@ -201,7 +201,7 @@ async def request_password_reset(
 
 
 @router.post(
-    "/password-reset/complete/",
+    "/reset-password/complete/",
     status_code=status.HTTP_200_OK,
     response_model=MessageResponseSchema,
 )
@@ -230,7 +230,7 @@ async def request_password_reset_complete(
             detail="Invalid email or token."
         )
 
-    if existed_token.expires_at < datetime.now(timezone.utc):
+    if existed_token.expires_at < datetime.now():
         await db.delete(existed_token)
         await db.commit()
 
@@ -256,7 +256,7 @@ async def request_password_reset_complete(
 
 @router.post(
     "/login/",
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_201_CREATED,
     response_model=UserLoginResponseSchema
 )
 async def login_user(
@@ -311,7 +311,11 @@ async def login_user(
         )
 
 
-@router.post("/refresh/", response_model=TokenRefreshResponseSchema)
+@router.post(
+    "/refresh/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=TokenRefreshResponseSchema
+)
 async def refresh_access_token(
         data: TokenRefreshRequestSchema,
         db: Annotated[AsyncSession, Depends(get_db)],
